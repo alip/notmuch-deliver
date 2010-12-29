@@ -54,7 +54,7 @@ AC_HEADER_DIRENT
 AC_HEADER_STDC
 AC_HEADER_TIME
 AC_HEADER_SYS_WAIT
-AC_CHECK_HEADERS([sys/stat.h unistd.h sysexits.h utime.h])
+AC_CHECK_HEADERS([sys/stat.h unistd.h stdint.h sysexits.h utime.h])
 dnl }}}
 
 dnl {{{ Check for typedefs, structures and compiler characteristics
@@ -64,6 +64,11 @@ AC_TYPE_SIZE_T
 AC_TYPE_UID_T
 AC_TYPE_PID_T
 AC_STRUCT_TM
+
+AC_CHECK_TYPE(int64_t, [ : ],
+		       [
+		       AC_DEFINE_UNQUOTED(int64_t,long long,[default definition of int64_t])
+		       ])
 dnl }}}
 
 dnl {{{ Check for library functions
