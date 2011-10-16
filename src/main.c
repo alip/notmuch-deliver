@@ -252,9 +252,13 @@ save_maildir(int fdin, const char *dir, int auto_create, char **path)
 
 	g_debug("Reading from standard input and writing to `%s'", info.tmpname);
 #ifdef HAVE_SPLICE
-	ret = g_getenv("NOTMUCH_DELIVER_NO_SPLICE")
-		? save_readwrite(fdin, fdout)
-		: save_splice(fdin, fdout);
+	if (g_getenv("NOTMUCH_DELIVER_NO_SPLICE"))
+		ret = save_readwrite(fdin, fdout);
+	else {
+		ret = save_splice(fdin, fdout);
+		if (ret)
+			ret = save_readwrite(fdin, fdout);
+	}
 #else
 	ret = save_readwrite(fdin, fdout);
 #endif /* HAVE_SPLICE */
