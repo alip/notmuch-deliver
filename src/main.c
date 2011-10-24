@@ -71,6 +71,9 @@
 #define EX_CONFIG 78
 #endif
 
+#define MIN_UWAIT 1000        // 1 millisecond
+#define MAX_UWAIT 600000000   // 10 minutes
+
 static gboolean opt_create, opt_fatal, opt_folder, opt_version;
 static gboolean opt_verbose = FALSE;
 static gchar **opt_tags = NULL;
@@ -428,10 +431,26 @@ main(int argc, char **argv)
 		maildir = g_strdup(db_path);
 
 	g_debug("Opening notmuch database `%s'", db_path);
-	db = notmuch_database_open(db_path, NOTMUCH_DATABASE_MODE_READ_WRITE);
+	gint32 wait_time = 0;
+	gint32 next_wait = MIN_UWAIT;
+	while ((db = notmuch_database_open(db_path, NOTMUCH_DATABASE_MODE_READ_WRITE)) == NULL) {
+		g_debug("Retrying to open database in %u microseconds", next_wait);
+		usleep(next_wait);
+
+		next_wait *= 2;
+		if (wait_time + next_wait >= MAX_UWAIT) {
+			wait_time = next_wait - MAX_UWAIT;
+			if (wait_time <= 0) {
+				g_free(db_path);
+				if (db == NULL)
+					return EX_SOFTWARE;
+			}
+		}
+
+		wait_time += next_wait;
+	}
 	g_free(db_path);
-	if (db == NULL)
-		return EX_SOFTWARE;
+
 	if (notmuch_database_needs_upgrade(db)) {
 		g_message("Upgrading database");
 		notmuch_database_upgrade(db, NULL, NULL);
