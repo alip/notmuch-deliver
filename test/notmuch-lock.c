@@ -14,6 +14,19 @@
 #define MAX_UWAIT 600000000   // 10 minutes
 
 
+typedef struct ChildFinishedData_
+{
+	GMainLoop *main_loop;
+	int return_val;
+} ChildFinishedData;
+
+typedef struct SpawnChildData_
+{
+	char** new_argv;
+	ChildFinishedData *child_finidshed_data;
+	GMainLoop *main_loop;
+	int return_val;
+} SpawnChildData;
 
 static gint sleep_option = -1;
 static GOptionEntry entries[] = {
@@ -88,6 +101,65 @@ get_db_path(void)
 	return db_path;
 }
 
+static void
+child_finished_cb(GPid pid, gint status, gpointer data)
+{
+	ChildFinishedData *child_finidshed_data = (ChildFinishedData *)data;
+
+	g_printerr("Called child_finished_cb()\n");
+
+	if WIFEXITED(status) {
+		child_finidshed_data->return_val = WEXITSTATUS(status);
+		g_printerr("PID %d exited normally with exit code %d\n", pid, WEXITSTATUS(status));
+	}
+
+	g_main_loop_quit(child_finidshed_data->main_loop);
+}
+
+
+static gboolean
+spawn_child_cb(gpointer data)
+{
+	SpawnChildData *spawn_child_data = (SpawnChildData *)data;
+
+	g_printerr("Called spawn_child_cb()\n");
+
+	gboolean spawn_success = FALSE;
+	GPid child_pid = 0;
+	spawn_success = g_spawn_async(
+			g_get_current_dir(),
+			spawn_child_data->new_argv,
+			NULL,
+			G_SPAWN_SEARCH_PATH | G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_DO_NOT_REAP_CHILD,
+			NULL,
+			NULL,
+			&child_pid,
+			NULL
+			);
+	if (spawn_success) {
+		g_child_watch_add(child_pid, &child_finished_cb, spawn_child_data->child_finidshed_data);
+	}
+	else {
+		g_printerr("faild to spawn child\n");
+	}
+
+
+	return FALSE;
+}
+
+static gboolean
+close_db_cb(gpointer data)
+{
+	notmuch_database_t *db = (notmuch_database_t*)data;
+
+	g_printerr("Called close_db_cb()\n");
+
+	// Close database again
+	notmuch_database_close(db);
+
+	return FALSE;
+}
+
 
 int
 main(int argc, char *argv[])
@@ -132,22 +204,6 @@ main(int argc, char *argv[])
 	if (db == NULL)
 		return EXIT_FAILURE;
 
-	gboolean spawn_success = FALSE;
-	GPid child_pid = 0;
-	spawn_success = g_spawn_async(
-			g_get_current_dir(),
-			new_argv,
-			NULL,
-			G_SPAWN_SEARCH_PATH | G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_DO_NOT_REAP_CHILD,
-			NULL,
-			NULL,
-			&child_pid,
-			NULL
-			);
-	if (!spawn_success) {
-		g_printerr("faild to spawn child\n");
-	}
-
 	// Sleep for some time
 	if (sleep_option >= 0) {
 		sleep_time = sleep_option;
@@ -155,13 +211,16 @@ main(int argc, char *argv[])
 		sleep_time = g_random_int_range(MIN_UWAIT, MAX_UWAIT);
 	}
 	g_printerr("Sleeping for %f secs\n", ((double)sleep_time)/(1000*1000));
-	usleep(sleep_time);
 
-	// Close database again
-	notmuch_database_close(db);
+	GMainLoop *main_loop = g_main_loop_new(NULL, FALSE);
 
-	int child_status = 0;
-	child_pid = waitpid(child_pid, &child_status, 0);
+	ChildFinishedData child_finidshed_data = {main_loop, 0};
+	SpawnChildData spawn_child_data = {new_argv, &child_finidshed_data, main_loop, 0};
 
-	return WEXITSTATUS(child_status);
+	g_idle_add(&spawn_child_cb, &spawn_child_data);
+	g_timeout_add(sleep_time / 1000, &close_db_cb, db);
+	g_main_loop_run(main_loop);
+
+
+	return child_finidshed_data.return_val;
 }
