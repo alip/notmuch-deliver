@@ -5,6 +5,7 @@
 *.py[co]
 
 tags
+TAGS
 
 *.lo
 *.la
