@@ -148,7 +148,7 @@ save_splice(int fdin, int fdout)
 	int ret, written, pfd[2];
 
 	if (pipe(pfd) < 0) {
-		g_critical("Failed to create pipe: %s", g_strerror(errno));
+		g_debug("Failed to create pipe: %s", g_strerror(errno));
 		return EX_IOERR;
 	}
 
@@ -157,7 +157,7 @@ save_splice(int fdin, int fdout)
 		if (!ret)
 			break;
 		if (ret < 0) {
-			g_critical("Splicing data from standard input failed: %s",
+			g_debug("Splicing data from standard input failed: %s",
 				g_strerror(errno));
 			close(pfd[0]);
 			close(pfd[1]);
@@ -167,13 +167,13 @@ save_splice(int fdin, int fdout)
 		do {
 			written = splice(pfd[0], NULL, fdout, NULL, ret, 0);
 			if (!written) {
-				g_critical("Splicing data to temporary file failed: internal error");
+				g_debug("Splicing data to temporary file failed: internal error");
 				close(pfd[0]);
 				close(pfd[1]);
 				return EX_IOERR;
 			}
 			if (written < 0) {
-				g_critical("Splicing data to temporary file failed: %s",
+				g_debug("Splicing data to temporary file failed: %s",
 					g_strerror(errno));
 				close(pfd[0]);
 				close(pfd[1]);
@@ -252,9 +252,13 @@ save_maildir(int fdin, const char *dir, int auto_create, char **path)
 
 	g_debug("Reading from standard input and writing to `%s'", info.tmpname);
 #ifdef HAVE_SPLICE
-	ret = g_getenv("NOTMUCH_DELIVER_NO_SPLICE")
-		? save_readwrite(fdin, fdout)
-		: save_splice(fdin, fdout);
+	if (g_getenv("NOTMUCH_DELIVER_NO_SPLICE"))
+		ret = save_readwrite(fdin, fdout);
+	else {
+		ret = save_splice(fdin, fdout);
+		if (ret)
+			ret = save_readwrite(fdin, fdout);
+	}
 #else
 	ret = save_readwrite(fdin, fdout);
 #endif /* HAVE_SPLICE */
