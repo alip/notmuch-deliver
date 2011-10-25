@@ -1,0 +1,12 @@
+[database]
+path=./nm-test-mail
+
+[user]
+name=NotMuch Test
+primary_email=notmuc@example.com
+
+[new]
+tags=unread;inbox;
+
+[maildir]
+synchronize_flags=true

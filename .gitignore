@@ -40,3 +40,5 @@ m4/lt*.m4
 
 maildrop/numlib/config.h
 src/notmuch-deliver
+test/notmuch-lock
+test/nm-test-mail
